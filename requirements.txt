@@ -5,3 +5,4 @@ pyarrow
 pyyaml
 openpyxl
 matplotlib
+plotly
