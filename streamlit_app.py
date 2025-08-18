@@ -726,20 +726,56 @@ with tab_dash:
 
         df_f = df.loc[mask].sort_values("final_confidence", ascending=False)
 
-        cA, cB = st.columns([2,1])
-        with cA:
+        # Display dashboard components in a 2x2 grid
+        top_left, top_right = st.columns(2)
+        bottom_left, bottom_right = st.columns(2)
+
+        with top_left:
             st.plotly_chart(scatter_dashboard(df_f), use_container_width=True)
-            st.dataframe(df_f[[c for c in [
-                "ticker","final_confidence","rs_confidence","breakout_confidence","sma_confidence",
-                "market_confidence","risk_confidence","volatility_confidence","adv_20d","atr_pct"
-            ] if c in df_f.columns]], use_container_width=True, height=500)
-        with cB:
-            # Simple histograms
-            for metric in ["final_confidence","rs_confidence","breakout_confidence","sma_confidence"]:
+
+        with top_right:
+            # Simple histograms for key metrics
+            for metric in [
+                "final_confidence",
+                "rs_confidence",
+                "breakout_confidence",
+                "sma_confidence",
+            ]:
                 if metric in df_f.columns:
                     hist = go.Figure(data=[go.Histogram(x=df_f[metric])])
                     hist.update_layout(title=f"{metric} distribution")
                     st.plotly_chart(hist, use_container_width=True)
+
+        with bottom_left:
+            st.dataframe(
+                df_f[
+                    [
+                        c
+                        for c in [
+                            "ticker",
+                            "final_confidence",
+                            "rs_confidence",
+                            "breakout_confidence",
+                            "sma_confidence",
+                            "market_confidence",
+                            "risk_confidence",
+                            "volatility_confidence",
+                            "adv_20d",
+                            "atr_pct",
+                        ]
+                        if c in df_f.columns
+                    ]
+                ],
+                use_container_width=True,
+                height=500,
+            )
+
+        with bottom_right:
+            st.write("**Summary**")
+            st.metric("Filtered count", len(df_f))
+            st.metric("Universe size", len(df))
+            if "benchmark_name" in df.columns and not df["benchmark_name"].isna().all():
+                st.metric("Benchmark", df["benchmark_name"].iloc[0])
 
         # Stock detail quick look
         st.divider()
