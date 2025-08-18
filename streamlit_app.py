@@ -318,6 +318,23 @@ def rs_scores(dfw_stock: pd.DataFrame, dfw_bench: pd.DataFrame, th: dict, wts: d
     out["rs_confidence"] = round(100.0 * clamp01(comp), 1)
     return out
 
+# ---- Alpha & Beta ----
+def alpha_beta_scores(dfw_stock: pd.DataFrame, dfw_bench: pd.DataFrame) -> dict:
+    out = {"alpha": None, "beta": None}
+    s = dfw_stock[["Close"]].rename(columns={"Close": "S"})
+    b = dfw_bench[["Close"]].rename(columns={"Close": "B"})
+    merged = s.join(b, how="inner").dropna()
+    if len(merged) < 2:
+        return out
+    returns = merged.pct_change().dropna()
+    if returns.empty or returns["B"].var() == 0:
+        return out
+    beta = returns["S"].cov(returns["B"]) / returns["B"].var()
+    alpha = returns["S"].mean() - beta * returns["B"].mean()
+    out["alpha"] = round(float(alpha), 3) if pd.notna(alpha) else None
+    out["beta"]  = round(float(beta), 3) if pd.notna(beta) else None
+    return out
+
 # ---- Step 5: Risk & Liquidity ----
 def liquidity_scores(df_daily: pd.DataFrame, th: dict) -> dict:
     MINV = th["risk"]["turnover_target_min"]
@@ -435,12 +452,14 @@ def evaluate_ticker(sym: str, df_daily: pd.DataFrame, df_bench_w: pd.DataFrame |
         }
         if df_bench_w is not None and not df_bench_w.empty:
             row.update(rs_scores(dfw, df_bench_w, th, wts))
+            row.update(alpha_beta_scores(dfw, df_bench_w))
         else:
             row.update({
                 "rs_confidence": 0.0, "rs_growth_score": 0.0,
                 "rs_consistency_score": 0.0, "rs_high_score": 0.0,
                 "rs_last": None, "rs_change_pct": None, "rs_rising_fraction": None, "rs_near_high_pct": None
             })
+            row.update({"alpha": None, "beta": None})
         row.update(liquidity_scores(df_daily, th))
         row.update(stop_distance_scores(dfw, th))
         row["risk_confidence"] = risk_confidence(row.get("liquidity_score", 0.0), row.get("stop_score", 0.0), wts)
@@ -667,7 +686,7 @@ with tab_scores:
                     "rs_confidence", "risk_confidence", "volatility_confidence",
                     "near_high_score", "vol_surge_score", "rs_growth_score", "rs_high_score",
                     "position_score", "trend_score", "mkt_position_score", "mkt_trend_score",
-                    "liquidity_score", "stop_score", "atr_pct"
+                    "liquidity_score", "stop_score", "atr_pct", "alpha", "beta"
                 ] if c in df.columns]
                 df_top = df.sort_values("final_confidence", ascending=False).head(top_n)[top_cols]
                 top_path = Path(out_dir)/"app_topN_overall.csv"
@@ -762,6 +781,8 @@ with tab_dash:
                             "volatility_confidence",
                             "adv_20d",
                             "atr_pct",
+                            "alpha",
+                            "beta",
                         ]
                         if c in df_f.columns
                     ]
@@ -795,3 +816,6 @@ with tab_dash:
                 st.write("**Scores**")
                 for key in ["final_confidence","sma_confidence","breakout_confidence","rs_confidence","market_confidence","risk_confidence","volatility_confidence"]:
                     st.progress(float(row.get(key,0))/100.0, text=f"{key} {row.get(key,0)}")
+                st.write("**Alpha/Beta**")
+                st.metric("Alpha", row.get("alpha", 0.0))
+                st.metric("Beta", row.get("beta", 0.0))
